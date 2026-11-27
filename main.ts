@@ -272,22 +272,28 @@ function drawParade(x: number, y: number, w: number, h: number): void {
   hline(x, x + w, y + h * 0.88, WHITE, 2);
   // ---- turkey balloon, centre-left, dominant ----
   const cx = x + w * 0.40, cy = y + h * 0.52;
-  // fan tail: five feathers fanning up behind the body
-  const feathers: [number, number][] = [[-32, -20], [-17, -31], [0, -35], [17, -31], [32, -20]];
-  for (const [fx, fy] of feathers) {
-    disc(cx + fx, cy + fy, 10, [120, 70, 30]);
-    disc(cx + fx * 1.35, cy + fy * 1.35, 4, [205, 125, 60]);
+  // fan tail: five SEPARATED feathers fanning up behind the body — each a
+  // leaf-shaped diamond with a gap to its neighbours and an orange tip, so
+  // the tail reads as feathers (not a crown) even at 300px.
+  const fan: [number, number][] = [[-0.74, -0.67], [-0.41, -0.91], [0, -1], [0.41, -0.91], [0.74, -0.67]];
+  for (const [dx, dy] of fan) {
+    const tx = cx + dx * 38, ty = cy + dy * 38; // feather tip
+    const bx = cx + dx * 10, by = cy + dy * 10; // feather base, at the body
+    const pxn = -dy * 5, pyn = dx * 5; // perpendicular half-width
+    poly([[tx, ty], [(tx + bx) / 2 + pxn, (ty + by) / 2 + pyn], [bx, by], [(tx + bx) / 2 - pxn, (ty + by) / 2 - pyn]], [120, 70, 30]);
+    disc(tx, ty, 4, [205, 125, 60]); // orange tip
   }
   // body: big brown ellipse, lighter belly
   ell(cx, cy, 26, 30, [150, 95, 40]);
   ell(cx + 2, cy + 8, 17, 20, [205, 140, 70]);
   // wing on the near side
   ell(cx - 12, cy + 4, 9, 16, [110, 65, 25]);
-  // head, top right of the body: beak + wattle + eye
+  // head, top right of the body: bigger beak + wattle + eye, so the bird
+  // reads even if the tail is ambiguous at small size
   disc(cx + 18, cy - 26, 10, [150, 95, 40]);
-  tri(cx + 26, cy - 30, cx + 26, cy - 22, cx + 36, cy - 26, [240, 180, 40]); // beak
-  disc(cx + 27, cy - 18, 3, [200, 40, 40]); // wattle
-  disc(cx + 20, cy - 29, 2, WHITE);
+  tri(cx + 26, cy - 31, cx + 26, cy - 21, cx + 42, cy - 26, [250, 190, 40]); // beak
+  disc(cx + 28, cy - 17, 4, [200, 40, 40]); // wattle
+  disc(cx + 20, cy - 29, 3, WHITE);
   disc(cx + 20, cy - 29, 1, [20, 20, 20]);
   // strings down to the street
   line(cx - 14, cy + 28, cx - 18, y + h * 0.78, [60, 40, 30]);
@@ -327,11 +333,12 @@ function drawPort(x: number, y: number, w: number, h: number): void {
   for (let r = 0; r < 2; r++) for (let c = 0; c < 6; c++) {
     rect(x + w * (0.19 + c * 0.105), y + h * (0.60 - (r + 1) * 0.15), w * 0.095, h * 0.13, cols[(r * 6 + c) % 6]);
   }
-  // red 25% tariff tag on the top-row red stack (second from left)
-  rect(x + w * 0.295, y + h * 0.315, w * 0.095, h * 0.115, WHITE);
-  rect(x + w * 0.295, y + h * 0.315, w * 0.095, 1, RED);
-  rect(x + w * 0.295, y + h * 0.315 + h * 0.115 - 1, w * 0.095, 1, RED);
-  drawText('25%', x + w * 0.305, y + h * 0.335, 1, RED);
+  // BIG 25% tariff band on the hull: a white billboard with huge red text, so
+  // the tariff reads from the art even at 300px (the old small tag was a speck).
+  rect(x + w * 0.28, y + h * 0.65, w * 0.44, h * 0.22, WHITE);
+  hline(x + w * 0.28, x + w * 0.72, y + h * 0.65, RED, 2);
+  hline(x + w * 0.28, x + w * 0.72, y + h * 0.87, RED, 2);
+  drawTextC('25%', x + w * 0.50, y + h * 0.665, 3, RED);
   // bridge tower, white with a red top
   rect(x + w * 0.845, y + h * 0.28, w * 0.05, h * 0.32, [225, 225, 220]);
   rect(x + w * 0.845, y + h * 0.28, w * 0.05, h * 0.06, [196, 60, 50]);
@@ -357,18 +364,21 @@ function drawTankerFire(x: number, y: number, w: number, h: number): void {
   rect(x, y + h * 0.62, w, h * 0.16, [232, 205, 155]);
   rect(x, y + h * 0.78, w, h * 0.22, [70, 68, 72]);
   for (let i = 0; i < 8; i++) hline(x + i * w * 0.125 + 4, x + (i + 1) * w * 0.125 - 4, y + h * 0.88, [240, 200, 60], 2);
-  // tanker: big silver cylinder + red cab, centre
-  const tx = x + w * 0.30, tw = w * 0.38, ty = y + h * 0.58, th = h * 0.16;
+  // tanker: big silver cylinder + red cab, centre — taller than before so the
+  // truck reads, and the flames now stop before the cab end: a clear stretch
+  // of silver hull + red stripe + cab stays visible beside the fire.
+  const tx = x + w * 0.30, tw = w * 0.38, ty = y + h * 0.58, th = h * 0.18;
   rect(tx, ty, tw, th, [225, 225, 220]);
   rect(tx, ty + th * 0.35, tw, th * 0.30, [200, 60, 50]); // red stripe
   disc(tx, ty + th / 2, th / 2, [205, 205, 200]); // tank end cap
   rect(tx + tw, ty, w * 0.08, th, [200, 60, 50]); // cab
   rect(tx + tw + w * 0.01, ty + th * 0.15, w * 0.05, th * 0.35, [180, 220, 235]); // cab window
-  disc(tx + tw * 0.25, ty + th + 4, 5, [20, 20, 22]);
-  disc(tx + tw * 0.60, ty + th + 4, 5, [20, 20, 22]);
-  disc(tx + tw + w * 0.04, ty + th + 4, 5, [20, 20, 22]);
-  // flame wall: five layered flames rising off the tank
-  const flames: [number, number][] = [[0.33, 0.50], [0.42, 0.42], [0.51, 0.48], [0.60, 0.36], [0.66, 0.28]];
+  disc(tx + tw * 0.25, ty + th + 3, 5, [20, 20, 22]);
+  disc(tx + tw * 0.60, ty + th + 3, 5, [20, 20, 22]);
+  disc(tx + tw + w * 0.04, ty + th + 3, 5, [20, 20, 22]);
+  // flame wall: four layered flames over the LEFT two-thirds of the tank —
+  // the right stretch of hull, stripe and cab stay flame-free and visible.
+  const flames: [number, number][] = [[0.35, 0.50], [0.43, 0.42], [0.51, 0.48], [0.58, 0.34]];
   for (const [fx, fh] of flames) {
     const bx = x + w * fx, bw = w * 0.075, base = ty;
     tri(bx - bw / 2, base, bx + bw / 2, base, bx, y + h * (0.58 - fh), [250, 110, 15]);
@@ -574,18 +584,33 @@ function drawMap(): void {
   rect(8, MAP_Y0, 1008, 1, INK); rect(8, MAP_Y1 - 1, 1008, 1, INK);
   rect(8, MAP_Y0, 1, MAP_Y1 - MAP_Y0, INK); rect(1015, MAP_Y0, 1, MAP_Y1 - MAP_Y0, INK);
 }
-// pins: [x, y, number] in pixels; Gaza pin sits SW of its true spot, leader line to the coast
+// pins: [x, y, number] in pixels. The Levant discs are STAGGERED with short
+// leader lines to their true spots, so none overlap: Cairo's disc sits N of
+// its spot, Jerusalem's E, Gaza's SW, Ituri's SE. Every leader ends on the
+// pin's true coast/land position (marked with a red dot).
 const PINS: [number, number, number][] = [
-  [277, 612, 1], [252, 616, 2], [571, 621, 3], [624, 603, 4], [491, 606, 5],
-  [583, 619, 6], [564, 634, 7], [836, 614, 8], [505, 639, 9], [567, 643, 10],
+  [277, 612, 1], [252, 616, 2], [566, 612, 3], [624, 603, 4], [491, 606, 5],
+  [605, 616, 6], [540, 648, 7], [836, 614, 8], [505, 639, 9], [585, 655, 10],
   [273, 636, 11], [901, 665, 12],
 ];
+// leaders: [discX, discY, trueX, trueY]
+const LEADERS: [number, number, number, number][] = [
+  [566, 612, 571, 621], // Cairo disc N of its true spot
+  [605, 616, 583, 619], // Jerusalem disc E of its true spot
+  [540, 648, 581, 620], // Gaza disc SW of its true spot
+  [585, 655, 567, 643], // Ituri disc SE of its true spot
+];
 function drawPins(): void {
-  line(564, 634, 580, 620, RED); // leader: Gaza pin to the Gaza coast
+  for (const [x0, y0, x1, y1] of LEADERS) {
+    line(x0, y0, x1, y1, RED);
+    disc(x1, y1, 2, RED); // dot marks the true spot
+  }
   for (const [x, y, n] of PINS) {
     disc(x, y, 8, WHITE);
     ring(x, y, 8, RED); ring(x, y, 7, RED);
-    drawTextC(String(n), x, y - 3, 1, RED);
+    const s = String(n);
+    drawTextC(s, x, y - 3, 1, RED);
+    drawTextC(s, x + 1, y - 3, 1, RED); // second pass = bolder digits
   }
 }
 
