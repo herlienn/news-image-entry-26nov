@@ -21,6 +21,13 @@ which clock times were reported exactly and which stories follow the
 news-cycle standard (first reported 25 November, headlining the 26 November
 papers).
 
+Version 2 redraws the art for head-to-head judging: the Cairo hero is now a
+bright daylight fire scene (flames, fire truck, ambulance, crowd) instead of
+a dark night panel; the parade's turkey balloon is drawn as a recognisable
+turkey (body, fan tail, beak, wattle); the tariff hero is a bright daylight
+port with a 25% tag; the map has high-contrast land and clearer pins. The
+news itself is unchanged from version 1.
+
 ## How it is built
 
 `main.ts` runs on Node 22 with the standard library only — no network, no

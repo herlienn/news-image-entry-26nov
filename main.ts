@@ -1,7 +1,11 @@
 // Node 22, standard library only. Draws one 1024x1024 PNG of the day's world news
 // to /output/entry.png (or $MAKEFUN_OUTPUT_DIR). No network. Deterministic:
 // two runs write the same bytes. Every glyph, scene and polygon below was drawn
-// by hand for this entry: Thursday 26 November 2026.
+// by hand for this entry: Thursday 26 November 2026, version 2.
+// v2 is a visual rebuild of v1: same stories, same headlines, same numbers —
+// only the drawing changed. v1's art lost head-to-head games because it was
+// dark, sparse and decorative; v2 draws every scene bright, busy and
+// recognisable at small size.
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
@@ -11,21 +15,19 @@ const buf = new Uint8Array(W * H * 3);
 // paper
 for (let i = 0; i < W * H; i++) { buf[i * 3] = 246; buf[i * 3 + 1] = 240; buf[i * 3 + 2] = 222; }
 
-// ---------- colour helpers ----------
+// ---------- palette ----------
 type RGB = [number, number, number];
 const INK: RGB = [20, 24, 38];
 const RED: RGB = [178, 34, 34];
-const BLUE: RGB = [26, 58, 110];
 const PAPER: RGB = [246, 240, 222];
-const SEA: RGB = [198, 222, 235];
-const LAND: RGB = [222, 196, 138];
+const SEA: RGB = [172, 208, 232];
+const LAND: RGB = [205, 162, 88];
+const COAST: RGB = [148, 112, 58];
 const GREY: RGB = [90, 92, 96];
 const WHITE: RGB = [255, 255, 255];
 const GOLD: RGB = [198, 150, 40];
-const GREEN: RGB = [34, 110, 60];
-const ORANGE: RGB = [224, 110, 30];
-const DARK: RGB = [30, 34, 52];
 
+// ---------- pixel primitives ----------
 function px(x: number, y: number, c: RGB): void {
   const xi = Math.round(x), yi = Math.round(y);
   if (xi < 0 || yi < 0 || xi >= W || yi >= H) return;
@@ -41,10 +43,10 @@ function rect(x: number, y: number, w: number, h: number, c: RGB): void {
   }
 }
 function hline(x0: number, x1: number, y: number, c: RGB, t = 1): void {
-  for (let t2 = 0; t2 < t; t2++) for (let x = Math.round(x0); x <= Math.round(x1); x++) px(x, y + t2, c);
+  for (let k = 0; k < t; k++) for (let x = Math.round(x0); x <= Math.round(x1); x++) px(x, y + k, c);
 }
 function vline(x: number, y0: number, y1: number, c: RGB, t = 1): void {
-  for (let t2 = 0; t2 < t; t2++) for (let y = Math.round(y0); y <= Math.round(y1); y++) px(x + t2, y, c);
+  for (let k = 0; k < t; k++) for (let y = Math.round(y0); y <= Math.round(y1); y++) px(x + k, y, c);
 }
 function line(x0: number, y0: number, x1: number, y1: number, c: RGB): void {
   let ax = Math.round(x0), ay = Math.round(y0);
@@ -73,6 +75,14 @@ function ring(cx: number, cy: number, r: number, c: RGB): void {
     px(cx + Math.round(Math.cos(t) * rr), cy + Math.round(Math.sin(t) * rr), c);
   }
 }
+// filled ellipse, radii rx, ry
+function ell(cx: number, cy: number, rx: number, ry: number, c: RGB): void {
+  const rxi = Math.round(rx), ryi = Math.round(ry);
+  for (let dy = -ryi; dy <= ryi; dy++) for (let dx = -rxi; dx <= rxi; dx++) {
+    if (rxi === 0 || ryi === 0) continue;
+    if ((dx * dx) / (rxi * rxi) + (dy * dy) / (ryi * ryi) <= 1) px(cx + dx, cy + dy, c);
+  }
+}
 // scanline polygon fill, points [x,y] integers
 function poly(pts: number[][], c: RGB): void {
   let minY = Infinity, maxY = -Infinity;
@@ -93,6 +103,13 @@ function poly(pts: number[][], c: RGB): void {
 }
 function tri(x0: number, y0: number, x1: number, y1: number, x2: number, y2: number, c: RGB): void {
   poly([[x0, y0], [x1, y1], [x2, y2]], c);
+}
+// stroke a closed polygon outline
+function polyline(pts: number[][], c: RGB): void {
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    line(a[0], a[1], b[0], b[1], c);
+  }
 }
 
 // ---------- PNG encoder ----------
@@ -212,7 +229,7 @@ function drawText(s: string, x: number, y: number, sc: number, c: RGB): void {
 function drawTextC(s: string, cx: number, y: number, sc: number, c: RGB): void {
   drawText(s, cx - Math.floor(textW(s, sc) / 2), y, sc, c);
 }
-// wrap into lines of at most maxW px (scale sc); returns lines
+// wrap into lines of at most maxW px (scale sc)
 function wrap(s: string, maxW: number, sc: number): string[] {
   const words = s.split(' ');
   const lines: string[] = [];
@@ -237,114 +254,178 @@ function num(n: number): string {
 }
 
 // ---------- illustrated scenes ----------
-// 1. Thanksgiving parade, New York: towers, street, balloons, confetti
+// HERO 1 — Thanksgiving parade, New York. The turkey balloon is the whole
+// point: a big fan-tailed turkey that reads as a TURKEY even at 300px.
 function drawParade(x: number, y: number, w: number, h: number): void {
-  rect(x, y, w, h, [140, 185, 220]); // sky
-  disc(x + w * 0.82, y + h * 0.22, 12, [255, 225, 140]); // sun
-  // towers left and right
-  rect(x + 4, y + h * 0.30, 34, h * 0.70, [52, 68, 104]);
-  rect(x + 44, y + h * 0.45, 26, h * 0.55, [70, 88, 128]);
-  rect(x + w - 40, y + h * 0.28, 36, h * 0.72, [52, 68, 104]);
-  rect(x + w - 72, y + h * 0.48, 26, h * 0.52, [70, 88, 128]);
-  for (let wy = 0; wy < 5; wy++) for (let wx = 0; wx < 3; wx++) {
-    rect(x + 10 + wx * 10, y + h * 0.36 + wy * 12, 5, 6, [255, 220, 120]);
-    rect(x + w - 34 + wx * 10, y + h * 0.34 + wy * 12, 5, 6, [255, 220, 120]);
+  rect(x, y, w, h, [150, 195, 230]); // bright daytime sky
+  disc(x + w * 0.86, y + h * 0.16, 11, [255, 225, 140]); // sun
+  // towers left and right, bright with lit windows
+  rect(x + 4, y + h * 0.34, 30, h * 0.44, [82, 105, 150]);
+  rect(x + 40, y + h * 0.48, 24, h * 0.30, [100, 125, 165]);
+  rect(x + w - 36, y + h * 0.32, 32, h * 0.46, [82, 105, 150]);
+  rect(x + w - 66, y + h * 0.50, 24, h * 0.28, [100, 125, 165]);
+  for (let wy = 0; wy < 4; wy++) for (let wx = 0; wx < 3; wx++) {
+    rect(x + 9 + wx * 9, y + h * 0.38 + wy * 11, 4, 5, [255, 220, 120]);
+    rect(x + w - 31 + wx * 9, y + h * 0.36 + wy * 11, 4, 5, [255, 220, 120]);
   }
-  rect(x, y + h * 0.78, w, h * 0.22, [96, 96, 100]); // street
-  hline(x, x + w, y + h * 0.86, [255, 255, 255], 2);
-  // big round balloon
-  disc(x + w * 0.42, y + h * 0.42, 26, [196, 40, 44]);
-  disc(x + w * 0.42, y + h * 0.42, 18, [224, 70, 70]);
-  line(x + w * 0.42, y + h * 0.42 + 26, x + w * 0.42, y + h * 0.72, [60, 40, 30]);
-  // turkey balloon
-  disc(x + w * 0.66, y + h * 0.38, 15, [150, 95, 40]);
-  disc(x + w * 0.66, y + h * 0.38, 9, [210, 140, 70]);
-  tri(x + w * 0.66 - 4, y + h * 0.38 - 14, x + w * 0.66 + 4, y + h * 0.38 - 14, x + w * 0.66, y + h * 0.38 - 22, [196, 40, 44]);
-  // marching band dots + confetti
-  for (let i = 0; i < 9; i++) disc(x + 14 + i * 34, y + h * 0.90, 3, i % 2 ? [255, 255, 255] : [255, 200, 60]);
-  disc(x + w * 0.15, y + h * 0.18, 2, [255, 80, 80]);
-  disc(x + w * 0.30, y + h * 0.12, 2, [255, 200, 60]);
-  disc(x + w * 0.55, y + h * 0.14, 2, [255, 255, 255]);
-  disc(x + w * 0.75, y + h * 0.10, 2, [255, 80, 80]);
-  disc(x + w * 0.90, y + h * 0.55, 2, [255, 200, 60]);
+  rect(x, y + h * 0.78, w, h * 0.22, [105, 105, 108]); // street
+  hline(x, x + w, y + h * 0.88, WHITE, 2);
+  // ---- turkey balloon, centre-left, dominant ----
+  const cx = x + w * 0.40, cy = y + h * 0.52;
+  // fan tail: five feathers fanning up behind the body
+  const feathers: [number, number][] = [[-32, -20], [-17, -31], [0, -35], [17, -31], [32, -20]];
+  for (const [fx, fy] of feathers) {
+    disc(cx + fx, cy + fy, 10, [120, 70, 30]);
+    disc(cx + fx * 1.35, cy + fy * 1.35, 4, [205, 125, 60]);
+  }
+  // body: big brown ellipse, lighter belly
+  ell(cx, cy, 26, 30, [150, 95, 40]);
+  ell(cx + 2, cy + 8, 17, 20, [205, 140, 70]);
+  // wing on the near side
+  ell(cx - 12, cy + 4, 9, 16, [110, 65, 25]);
+  // head, top right of the body: beak + wattle + eye
+  disc(cx + 18, cy - 26, 10, [150, 95, 40]);
+  tri(cx + 26, cy - 30, cx + 26, cy - 22, cx + 36, cy - 26, [240, 180, 40]); // beak
+  disc(cx + 27, cy - 18, 3, [200, 40, 40]); // wattle
+  disc(cx + 20, cy - 29, 2, WHITE);
+  disc(cx + 20, cy - 29, 1, [20, 20, 20]);
+  // strings down to the street
+  line(cx - 14, cy + 28, cx - 18, y + h * 0.78, [60, 40, 30]);
+  line(cx + 14, cy + 28, cx + 18, y + h * 0.78, [60, 40, 30]);
+  // round red balloon, smaller, at the right
+  disc(x + w * 0.74, y + h * 0.38, 15, [196, 40, 44]);
+  disc(x + w * 0.74 - 4, y + h * 0.38 - 4, 6, [230, 95, 95]);
+  line(x + w * 0.74, y + h * 0.38 + 15, x + w * 0.74, y + h * 0.78, [60, 40, 30]);
+  // parade crowd along the street + confetti in the sky
+  const crowd: RGB[] = [[255, 255, 255], [255, 200, 60], [196, 40, 44], [40, 90, 160], [40, 120, 70]];
+  for (let i = 0; i < 12; i++) disc(x + 10 + i * 27, y + h * 0.92, 3, crowd[i % 5]);
+  disc(x + w * 0.10, y + h * 0.12, 2, [255, 80, 80]);
+  disc(x + w * 0.24, y + h * 0.08, 2, [255, 200, 60]);
+  disc(x + w * 0.58, y + h * 0.10, 2, WHITE);
+  disc(x + w * 0.92, y + h * 0.55, 2, [255, 200, 60]);
+  disc(x + w * 0.05, y + h * 0.55, 2, [40, 90, 160]);
 }
-// 2. Container port: ship, stacked boxes, cranes
+// HERO 2 — container port in bright daylight, with a red 25% tariff tag
+// on the biggest stack (the deck says India faces up to 25%).
 function drawPort(x: number, y: number, w: number, h: number): void {
-  rect(x, y, w, h, [150, 195, 225]); // sky
-  disc(x + w * 0.12, y + h * 0.20, 11, [255, 225, 140]);
-  rect(x, y + h * 0.62, w, h * 0.38, [46, 92, 140]); // sea
-  // cranes
-  line(x + w * 0.08, y + h * 0.62, x + w * 0.08, y + h * 0.10, [40, 44, 58]);
-  line(x + w * 0.08, y + h * 0.10, x + w * 0.30, y + h * 0.10, [40, 44, 58]);
-  line(x + w * 0.30, y + h * 0.10, x + w * 0.30, y + h * 0.30, [40, 44, 58]);
-  line(x + w * 0.86, y + h * 0.62, x + w * 0.86, y + h * 0.16, [40, 44, 58]);
-  line(x + w * 0.86, y + h * 0.16, x + w * 0.66, y + h * 0.16, [40, 44, 58]);
+  rect(x, y, w, h, [165, 205, 235]); // bright sky
+  disc(x + w * 0.10, y + h * 0.16, 10, [255, 225, 140]); // sun
+  rect(x, y + h * 0.60, w, h * 0.40, [52, 110, 165]); // sea
+  hline(x + w * 0.05, x + w * 0.95, y + h * 0.72, WHITE, 1);
+  hline(x + w * 0.10, x + w * 0.90, y + h * 0.84, WHITE, 1);
+  // gantry cranes
+  line(x + w * 0.06, y + h * 0.60, x + w * 0.06, y + h * 0.08, [45, 48, 62]);
+  line(x + w * 0.06, y + h * 0.08, x + w * 0.28, y + h * 0.08, [45, 48, 62]);
+  line(x + w * 0.28, y + h * 0.08, x + w * 0.28, y + h * 0.26, [45, 48, 62]);
+  line(x + w * 0.92, y + h * 0.60, x + w * 0.92, y + h * 0.14, [45, 48, 62]);
+  line(x + w * 0.92, y + h * 0.14, x + w * 0.72, y + h * 0.14, [45, 48, 62]);
   // ship hull
-  poly([[x + w * 0.22, y + h * 0.62], [x + w * 0.78, y + h * 0.62], [x + w * 0.72, y + h * 0.88], [x + w * 0.28, y + h * 0.88]], [30, 34, 48]);
-  // container stacks
-  const cols: RGB[] = [[196, 60, 50], [40, 120, 70], [220, 150, 40], [50, 90, 160], [180, 60, 120]];
-  for (let r = 0; r < 2; r++) for (let c = 0; c < 5; c++) {
-    rect(x + w * 0.25 + c * w * 0.10, y + h * 0.62 - (r + 1) * h * 0.16, w * 0.09, h * 0.14, cols[(r * 5 + c) % 5]);
+  poly([[x + w * 0.14, y + h * 0.60], [x + w * 0.86, y + h * 0.60], [x + w * 0.80, y + h * 0.92], [x + w * 0.20, y + h * 0.92]], [28, 34, 50]);
+  hline(x + w * 0.16, x + w * 0.84, y + h * 0.64, WHITE, 2);
+  // container stacks: two rows, six bright colours
+  const cols: RGB[] = [[196, 60, 50], [40, 120, 70], [220, 150, 40], [50, 90, 160], [230, 190, 60], [150, 70, 140]];
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 6; c++) {
+    rect(x + w * (0.19 + c * 0.105), y + h * (0.60 - (r + 1) * 0.15), w * 0.095, h * 0.13, cols[(r * 6 + c) % 6]);
   }
-  // bridge
-  rect(x + w * 0.76, y + h * 0.30, w * 0.06, h * 0.32, [220, 220, 215]);
-  rect(x + w * 0.76, y + h * 0.30, w * 0.06, h * 0.06, [196, 60, 50]);
+  // red 25% tariff tag on the top-row red stack (second from left)
+  rect(x + w * 0.295, y + h * 0.315, w * 0.095, h * 0.115, WHITE);
+  rect(x + w * 0.295, y + h * 0.315, w * 0.095, 1, RED);
+  rect(x + w * 0.295, y + h * 0.315 + h * 0.115 - 1, w * 0.095, 1, RED);
+  drawText('25%', x + w * 0.305, y + h * 0.335, 1, RED);
+  // bridge tower, white with a red top
+  rect(x + w * 0.845, y + h * 0.28, w * 0.05, h * 0.32, [225, 225, 220]);
+  rect(x + w * 0.845, y + h * 0.28, w * 0.05, h * 0.06, [196, 60, 50]);
+  rect(x + w * 0.845, y + h * 0.38, w * 0.05, h * 0.05, [40, 60, 90]);
+  // bow wake
+  line(x + w * 0.86, y + h * 0.92, x + w * 0.96, y + h * 0.86, WHITE);
+  line(x + w * 0.86, y + h * 0.92, x + w * 0.96, y + h * 0.97, WHITE);
 }
-// 3. Cairo tanker fire at dusk: highway, tanker, flames, smoke
+// HERO 3 — Cairo tanker fire, redrawn as the BRIGHTEST panel: warm amber
+// daylight, a wall of layered flames, light smoke, fire trucks spraying
+// water and a roadside crowd. No large dark areas anywhere.
 function drawTankerFire(x: number, y: number, w: number, h: number): void {
-  rect(x, y, w, h * 0.55, [52, 52, 92]); // dusk sky
-  disc(x + w * 0.85, y + h * 0.18, 10, [255, 190, 110]);
-  rect(x, y + h * 0.55, w, h * 0.45, [70, 66, 70]); // ground
-  rect(x, y + h * 0.68, w, h * 0.32, [44, 44, 48]); // highway
-  hline(x, x + w, y + h * 0.82, [240, 200, 60], 2);
-  // skyline
-  rect(x + 8, y + h * 0.38, 22, h * 0.20, [40, 40, 66]);
-  rect(x + w - 34, y + h * 0.42, 26, h * 0.16, [40, 40, 66]);
-  // tanker: cab + cylinder
-  rect(x + w * 0.52, y + h * 0.60, w * 0.10, h * 0.16, [200, 60, 50]);
-  rect(x + w * 0.55, y + h * 0.63, w * 0.04, h * 0.06, [180, 220, 235]);
-  poly([[x + w * 0.18, y + h * 0.66], [x + w * 0.52, y + h * 0.66], [x + w * 0.52, y + h * 0.56], [x + w * 0.18, y + h * 0.56]], [190, 190, 185]);
-  disc(x + w * 0.25, y + h * 0.78, 5, [20, 20, 22]);
-  disc(x + w * 0.45, y + h * 0.78, 5, [20, 20, 22]);
-  disc(x + w * 0.57, y + h * 0.78, 5, [20, 20, 22]);
-  // flames
-  tri(x + w * 0.20, y + h * 0.56, x + w * 0.28, y + h * 0.56, x + w * 0.24, y + h * 0.30, [240, 120, 20]);
-  tri(x + w * 0.30, y + h * 0.56, x + w * 0.38, y + h * 0.56, x + w * 0.34, y + h * 0.38, [250, 180, 40]);
-  tri(x + w * 0.40, y + h * 0.56, x + w * 0.48, y + h * 0.56, x + w * 0.44, y + h * 0.34, [240, 120, 20]);
-  // smoke
-  disc(x + w * 0.24, y + h * 0.22, 12, [80, 80, 88]);
-  disc(x + w * 0.34, y + h * 0.14, 14, [96, 96, 104]);
-  disc(x + w * 0.44, y + h * 0.22, 10, [80, 80, 88]);
-  disc(x + w * 0.12, y + h * 0.86, 2, [255, 60, 60]);
-  disc(x + w * 0.90, y + h * 0.86, 2, [255, 60, 60]);
+  // warm amber sky in three bright bands
+  rect(x, y, w, h * 0.30, [255, 205, 130]);
+  rect(x, y + h * 0.30, w, h * 0.25, [255, 175, 95]);
+  rect(x, y + h * 0.55, w, h * 0.07, [255, 145, 70]);
+  disc(x + w * 0.88, y + h * 0.13, 10, [255, 240, 180]); // hazy sun
+  // light tan skyline along the horizon
+  rect(x + w * 0.02, y + h * 0.44, w * 0.07, h * 0.18, [215, 180, 125]);
+  rect(x + w * 0.11, y + h * 0.50, w * 0.05, h * 0.12, [215, 180, 125]);
+  rect(x + w * 0.90, y + h * 0.46, w * 0.08, h * 0.16, [215, 180, 125]);
+  // sandy ground, then the ring road
+  rect(x, y + h * 0.62, w, h * 0.16, [232, 205, 155]);
+  rect(x, y + h * 0.78, w, h * 0.22, [70, 68, 72]);
+  for (let i = 0; i < 8; i++) hline(x + i * w * 0.125 + 4, x + (i + 1) * w * 0.125 - 4, y + h * 0.88, [240, 200, 60], 2);
+  // tanker: big silver cylinder + red cab, centre
+  const tx = x + w * 0.30, tw = w * 0.38, ty = y + h * 0.58, th = h * 0.16;
+  rect(tx, ty, tw, th, [225, 225, 220]);
+  rect(tx, ty + th * 0.35, tw, th * 0.30, [200, 60, 50]); // red stripe
+  disc(tx, ty + th / 2, th / 2, [205, 205, 200]); // tank end cap
+  rect(tx + tw, ty, w * 0.08, th, [200, 60, 50]); // cab
+  rect(tx + tw + w * 0.01, ty + th * 0.15, w * 0.05, th * 0.35, [180, 220, 235]); // cab window
+  disc(tx + tw * 0.25, ty + th + 4, 5, [20, 20, 22]);
+  disc(tx + tw * 0.60, ty + th + 4, 5, [20, 20, 22]);
+  disc(tx + tw + w * 0.04, ty + th + 4, 5, [20, 20, 22]);
+  // flame wall: five layered flames rising off the tank
+  const flames: [number, number][] = [[0.33, 0.50], [0.42, 0.42], [0.51, 0.48], [0.60, 0.36], [0.66, 0.28]];
+  for (const [fx, fh] of flames) {
+    const bx = x + w * fx, bw = w * 0.075, base = ty;
+    tri(bx - bw / 2, base, bx + bw / 2, base, bx, y + h * (0.58 - fh), [250, 110, 15]);
+    tri(bx - bw / 3, base, bx + bw / 3, base, bx, y + h * (0.58 - fh * 0.72), [255, 190, 40]);
+    tri(bx - bw / 5, base, bx + bw / 5, base, bx, y + h * (0.58 - fh * 0.45), [255, 235, 120]);
+  }
+  // light smoke puffs above the flames (pale, not black)
+  disc(x + w * 0.40, y + h * 0.10, 12, [215, 210, 205]);
+  disc(x + w * 0.50, y + h * 0.06, 13, [225, 220, 215]);
+  disc(x + w * 0.60, y + h * 0.11, 11, [215, 210, 205]);
+  // fire truck at the left, ladder up, water arc onto the fire
+  rect(x + w * 0.02, y + h * 0.66, w * 0.13, h * 0.12, [200, 40, 40]);
+  rect(x + w * 0.11, y + h * 0.66, w * 0.04, h * 0.12, [225, 225, 220]);
+  line(x + w * 0.06, y + h * 0.66, x + w * 0.20, y + h * 0.42, [220, 220, 220]);
+  const arc: [number, number][] = [[0.20, 0.42], [0.23, 0.36], [0.27, 0.33], [0.31, 0.34], [0.34, 0.38]];
+  for (const [ax, ay] of arc) disc(x + w * ax, y + h * ay, 2, [170, 210, 240]);
+  // white ambulance at the right with a red cross
+  rect(x + w * 0.84, y + h * 0.64, w * 0.13, h * 0.14, WHITE);
+  rect(x + w * 0.885, y + h * 0.66, w * 0.02, h * 0.08, RED);
+  rect(x + w * 0.865, y + h * 0.685, w * 0.06, h * 0.02, RED);
+  disc(x + w * 0.87, y + h * 0.79, 4, [20, 20, 22]);
+  disc(x + w * 0.94, y + h * 0.79, 4, [20, 20, 22]);
+  // roadside crowd + rising embers
+  const crowd: RGB[] = [[255, 255, 255], [40, 90, 160], [255, 200, 60], [196, 40, 44], [40, 120, 70]];
+  for (let i = 0; i < 7; i++) disc(x + w * (0.05 + i * 0.03), y + h * 0.72, 3, crowd[i % 5]);
+  disc(x + w * 0.45, y + h * 0.30, 2, [255, 200, 60]);
+  disc(x + w * 0.55, y + h * 0.24, 2, [250, 120, 20]);
+  disc(x + w * 0.50, y + h * 0.18, 2, [255, 235, 120]);
 }
-// 4. Refinery at night: towers, pipes, flare
+// GRID 1 — refinery in daylight: pale sky, light towers, one big flame
 function drawRefinery(x: number, y: number, w: number, h: number): void {
-  rect(x, y, w, h, [28, 34, 58]);
-  disc(x + w * 0.80, y + h * 0.22, 7, [230, 230, 210]);
-  rect(x + w * 0.10, y + h * 0.45, w * 0.08, h * 0.55, [120, 120, 125]);
-  rect(x + w * 0.24, y + h * 0.30, w * 0.10, h * 0.70, [140, 140, 145]);
-  rect(x + w * 0.40, y + h * 0.52, w * 0.08, h * 0.48, [110, 110, 115]);
-  rect(x + w * 0.55, y + h * 0.38, w * 0.16, h * 0.62, [90, 95, 100]);
-  hline(x, x + w, y + h * 0.62, [200, 200, 200], 2);
-  tri(x + w * 0.27, y + h * 0.30, x + w * 0.33, y + h * 0.30, x + w * 0.30, y + h * 0.10, [250, 160, 30]);
-  disc(x + w * 0.30, y + h * 0.08, 4, [250, 200, 60]);
-  disc(x + w * 0.62, y + h * 0.30, 5, [120, 120, 125]);
-  disc(x + w * 0.68, y + h * 0.20, 6, [140, 140, 145]);
+  rect(x, y, w, h, [175, 210, 235]);
+  rect(x, y + h * 0.78, w, h * 0.22, [200, 200, 195]);
+  rect(x + w * 0.08, y + h * 0.45, w * 0.10, h * 0.35, [150, 150, 155]);
+  rect(x + w * 0.24, y + h * 0.28, w * 0.12, h * 0.52, [170, 170, 175]);
+  rect(x + w * 0.42, y + h * 0.52, w * 0.10, h * 0.28, [140, 140, 145]);
+  disc(x + w * 0.62, y + h * 0.55, 10, [185, 185, 190]);
+  rect(x + w * 0.60, y + h * 0.65, w * 0.04, h * 0.15, [140, 140, 145]);
+  tri(x + w * 0.26, y + h * 0.28, x + w * 0.34, y + h * 0.28, x + w * 0.30, y + h * 0.06, [250, 160, 30]);
+  tri(x + w * 0.28, y + h * 0.28, x + w * 0.32, y + h * 0.28, x + w * 0.30, y + h * 0.16, [255, 220, 80]);
+  disc(x + w * 0.30, y + h * 0.05, 3, [255, 220, 80]);
+  disc(x + w * 0.78, y + h * 0.22, 6, [235, 235, 230]);
+  disc(x + w * 0.86, y + h * 0.14, 7, [245, 245, 240]);
 }
-// 5. Football: green pitch, goal, ball
+// GRID 2 — football: green pitch, white goal, ball
 function drawFootball(x: number, y: number, w: number, h: number): void {
   rect(x, y, w, h, [36, 130, 60]);
-  hline(x, x + w, y + h * 0.50, [255, 255, 255], 2);
-  disc(x + w * 0.50, y + h * 0.50, 9, [255, 255, 255]);
-  ring(x + w * 0.50, y + h * 0.50, 9, [255, 255, 255]);
-  rect(x + w * 0.38, y + h * 0.06, w * 0.24, h * 0.20, [255, 255, 255]);
+  hline(x, x + w, y + h * 0.50, WHITE, 2);
+  disc(x + w * 0.50, y + h * 0.50, 9, WHITE);
+  ring(x + w * 0.50, y + h * 0.50, 9, WHITE);
+  rect(x + w * 0.38, y + h * 0.06, w * 0.24, h * 0.20, WHITE);
   rect(x + w * 0.40, y + h * 0.08, w * 0.20, h * 0.18, [36, 130, 60]);
-  disc(x + w * 0.68, y + h * 0.72, 6, [255, 255, 255]);
+  disc(x + w * 0.68, y + h * 0.72, 6, WHITE);
   disc(x + w * 0.68, y + h * 0.72, 3, [20, 20, 20]);
-  disc(x + w * 0.22, y + h * 0.80, 3, [255, 255, 255]);
+  disc(x + w * 0.22, y + h * 0.80, 3, WHITE);
 }
-// 6. Courthouse: pediment, columns, steps
+// GRID 3 — courthouse: pediment, columns, steps
 function drawCourthouse(x: number, y: number, w: number, h: number): void {
   rect(x, y, w, h, [170, 200, 220]);
   tri(x + w * 0.10, y + h * 0.30, x + w * 0.90, y + h * 0.30, x + w * 0.50, y + h * 0.08, [210, 205, 190]);
@@ -352,73 +433,72 @@ function drawCourthouse(x: number, y: number, w: number, h: number): void {
   for (let c = 0; c < 4; c++) rect(x + w * (0.16 + c * 0.20), y + h * 0.36, w * 0.07, h * 0.44, [235, 232, 220]);
   rect(x + w * 0.05, y + h * 0.80, w * 0.90, h * 0.07, [180, 175, 160]);
   rect(x + w * 0.02, y + h * 0.87, w * 0.96, h * 0.07, [160, 155, 140]);
-  disc(x + w * 0.50, y + h * 0.20, 4, [178, 34, 34]);
+  disc(x + w * 0.50, y + h * 0.20, 4, RED);
 }
-// 7. Storm over tents: dark cloud, rain, tents
+// GRID 4 — storm over tents, brightened: pale slate sky, white rain,
+// cream tents with red doors
 function drawStorm(x: number, y: number, w: number, h: number): void {
-  rect(x, y, w, h, [120, 130, 150]);
-  disc(x + w * 0.30, y + h * 0.25, 14, [70, 76, 90]);
-  disc(x + w * 0.50, y + h * 0.18, 16, [60, 66, 80]);
-  disc(x + w * 0.70, y + h * 0.25, 14, [70, 76, 90]);
-  rect(x, y + h * 0.42, w, h * 0.58, [150, 140, 115]);
-  for (let i = 0; i < 7; i++) line(x + w * (0.08 + i * 0.13), y + h * 0.42, x + w * (0.05 + i * 0.13), y + h * 0.62, [220, 225, 235]);
-  tri(x + w * 0.12, y + h * 0.80, x + w * 0.30, y + h * 0.80, x + w * 0.21, y + h * 0.58, [240, 235, 220]);
-  tri(x + w * 0.38, y + h * 0.82, x + w * 0.56, y + h * 0.82, x + w * 0.47, y + h * 0.60, [220, 214, 196]);
-  tri(x + w * 0.64, y + h * 0.80, x + w * 0.82, y + h * 0.80, x + w * 0.73, y + h * 0.58, [240, 235, 220]);
-  rect(x + w * 0.19, y + h * 0.78, w * 0.04, h * 0.04, [120, 60, 40]);
+  rect(x, y, w, h, [175, 185, 200]);
+  disc(x + w * 0.30, y + h * 0.25, 14, [125, 133, 150]);
+  disc(x + w * 0.50, y + h * 0.18, 16, [115, 123, 140]);
+  disc(x + w * 0.70, y + h * 0.25, 14, [125, 133, 150]);
+  rect(x, y + h * 0.42, w, h * 0.58, [175, 165, 140]);
+  for (let i = 0; i < 7; i++) line(x + w * (0.08 + i * 0.13), y + h * 0.42, x + w * (0.05 + i * 0.13), y + h * 0.62, [240, 242, 245]);
+  tri(x + w * 0.12, y + h * 0.80, x + w * 0.30, y + h * 0.80, x + w * 0.21, y + h * 0.58, [245, 240, 225]);
+  tri(x + w * 0.38, y + h * 0.82, x + w * 0.56, y + h * 0.82, x + w * 0.47, y + h * 0.60, [230, 224, 206]);
+  tri(x + w * 0.64, y + h * 0.80, x + w * 0.82, y + h * 0.80, x + w * 0.73, y + h * 0.58, [245, 240, 225]);
+  rect(x + w * 0.19, y + h * 0.76, w * 0.04, h * 0.05, [196, 40, 44]);
+  rect(x + w * 0.71, y + h * 0.76, w * 0.04, h * 0.05, [196, 40, 44]);
 }
-// 8. Microchip: dark board, chip, circuit traces
+// GRID 5 — microchip on a PALE board: dark chip, green traces, gold pins
 function drawChip(x: number, y: number, w: number, h: number): void {
-  rect(x, y, w, h, [18, 60, 44]);
-  line(x + w * 0.06, y + h * 0.20, x + w * 0.30, y + h * 0.20, [80, 200, 140]);
-  line(x + w * 0.06, y + h * 0.80, x + w * 0.30, y + h * 0.80, [80, 200, 140]);
-  line(x + w * 0.70, y + h * 0.20, x + w * 0.94, y + h * 0.20, [80, 200, 140]);
-  line(x + w * 0.70, y + h * 0.80, x + w * 0.94, y + h * 0.80, [80, 200, 140]);
-  rect(x + w * 0.32, y + h * 0.22, w * 0.36, h * 0.56, [30, 34, 44]);
+  rect(x, y, w, h, [185, 220, 225]);
+  line(x + w * 0.06, y + h * 0.20, x + w * 0.30, y + h * 0.20, [40, 160, 110]);
+  line(x + w * 0.06, y + h * 0.80, x + w * 0.30, y + h * 0.80, [40, 160, 110]);
+  line(x + w * 0.70, y + h * 0.20, x + w * 0.94, y + h * 0.20, [40, 160, 110]);
+  line(x + w * 0.70, y + h * 0.80, x + w * 0.94, y + h * 0.80, [40, 160, 110]);
+  rect(x + w * 0.32, y + h * 0.22, w * 0.36, h * 0.56, [25, 40, 70]);
   for (let i = 0; i < 4; i++) {
-    rect(x + w * (0.32 + i * 0.09), y + h * 0.12, w * 0.03, h * 0.10, [180, 180, 190]);
-    rect(x + w * (0.32 + i * 0.09), y + h * 0.78, w * 0.03, h * 0.10, [180, 180, 190]);
+    rect(x + w * (0.32 + i * 0.09), y + h * 0.12, w * 0.03, h * 0.10, [200, 170, 60]);
+    rect(x + w * (0.32 + i * 0.09), y + h * 0.78, w * 0.03, h * 0.10, [200, 170, 60]);
   }
   rect(x + w * 0.40, y + h * 0.38, w * 0.20, h * 0.24, [40, 140, 110]);
   drawText('5G', x + w * 0.42, y + h * 0.42, 1, WHITE);
   disc(x + w * 0.12, y + h * 0.50, 3, [250, 200, 60]);
   disc(x + w * 0.88, y + h * 0.50, 3, [250, 200, 60]);
 }
-// 9. Rocket on a pad with a flag
+// GRID 6 — rocket in bright daylight: blue sky, white rocket, orange flame
 function drawRocket(x: number, y: number, w: number, h: number): void {
-  rect(x, y, w, h, [30, 42, 78]);
-  disc(x + w * 0.78, y + h * 0.20, 8, [235, 235, 220]);
-  rect(x + w * 0.44, y + h * 0.22, w * 0.12, h * 0.55, [225, 225, 220]);
+  rect(x, y, w, h, [150, 195, 235]);
+  disc(x + w * 0.80, y + h * 0.20, 8, [255, 225, 140]);
+  rect(x, y + h * 0.88, w, h * 0.12, [90, 140, 80]);
+  rect(x + w * 0.44, y + h * 0.22, w * 0.12, h * 0.55, [235, 235, 230]);
   tri(x + w * 0.44, y + h * 0.22, x + w * 0.56, y + h * 0.22, x + w * 0.50, y + h * 0.06, [196, 40, 44]);
   rect(x + w * 0.47, y + h * 0.40, w * 0.06, h * 0.12, [40, 90, 160]);
   disc(x + w * 0.50, y + h * 0.46, 3, WHITE);
   tri(x + w * 0.44, y + h * 0.77, x + w * 0.38, y + h * 0.88, x + w * 0.44, y + h * 0.88, [196, 40, 44]);
   tri(x + w * 0.56, y + h * 0.77, x + w * 0.62, y + h * 0.88, x + w * 0.56, y + h * 0.88, [196, 40, 44]);
   tri(x + w * 0.47, y + h * 0.88, x + w * 0.53, y + h * 0.88, x + w * 0.50, y + h * 0.98, [250, 170, 40]);
-  rect(x, y + h * 0.88, w, h * 0.12, [90, 90, 95]);
-  line(x + w * 0.16, y + h * 0.88, x + w * 0.16, y + h * 0.40, [200, 200, 200]);
+  line(x + w * 0.16, y + h * 0.88, x + w * 0.16, y + h * 0.40, [220, 220, 220]);
   rect(x + w * 0.16, y + h * 0.40, w * 0.14, h * 0.12, [196, 40, 44]);
   disc(x + w * 0.21, y + h * 0.46, 3, WHITE);
 }
-// 10. Lab flasks
+// GRID 7 — lab flasks
 function drawLab(x: number, y: number, w: number, h: number): void {
   rect(x, y, w, h, [210, 225, 230]);
   rect(x, y + h * 0.78, w, h * 0.22, [120, 110, 100]);
-  // flask 1
   rect(x + w * 0.14, y + h * 0.20, w * 0.06, h * 0.25, [60, 60, 70]);
   tri(x + w * 0.08, y + h * 0.78, x + w * 0.26, y + h * 0.78, x + w * 0.17, y + h * 0.45, [200, 220, 230]);
   tri(x + w * 0.11, y + h * 0.78, x + w * 0.23, y + h * 0.78, x + w * 0.17, y + h * 0.55, [60, 180, 90]);
-  // flask 2
   rect(x + w * 0.46, y + h * 0.14, w * 0.06, h * 0.30, [60, 60, 70]);
   tri(x + w * 0.40, y + h * 0.78, x + w * 0.58, y + h * 0.78, x + w * 0.49, y + h * 0.44, [200, 220, 230]);
   tri(x + w * 0.43, y + h * 0.78, x + w * 0.55, y + h * 0.78, x + w * 0.49, y + h * 0.52, [220, 120, 60]);
-  // test tube
   rect(x + w * 0.72, y + h * 0.18, w * 0.08, h * 0.60, [200, 220, 230]);
   rect(x + w * 0.72, y + h * 0.50, w * 0.08, h * 0.28, [70, 130, 200]);
   disc(x + w * 0.86, y + h * 0.30, 3, [60, 180, 90]);
   disc(x + w * 0.88, y + h * 0.42, 2, [220, 120, 60]);
 }
-// 11. Field hospital tent with a cross
+// GRID 8 — field hospital tent with a red cross
 function drawHospital(x: number, y: number, w: number, h: number): void {
   rect(x, y, w, h, [150, 190, 170]);
   disc(x + w * 0.82, y + h * 0.20, 8, [255, 225, 140]);
@@ -427,20 +507,16 @@ function drawHospital(x: number, y: number, w: number, h: number): void {
   rect(x + w * 0.30, y + h * 0.70, w * 0.12, h * 0.10, [120, 60, 40]);
   rect(x + w * 0.33, y + h * 0.42, w * 0.06, h * 0.22, [196, 40, 44]);
   rect(x + w * 0.27, y + h * 0.48, w * 0.18, h * 0.06, [196, 40, 44]);
-  disc(x + w * 0.70, y + h * 0.30, 3, [196, 40, 44]);
-  disc(x + w * 0.78, y + h * 0.42, 3, [196, 40, 44]);
-  disc(x + w * 0.66, y + h * 0.48, 3, [196, 40, 44]);
-  disc(x + w * 0.86, y + h * 0.55, 3, [196, 40, 44]);
   line(x + w * 0.68, y + h * 0.88, x + w * 0.68, y + h * 0.40, [200, 200, 200]);
   rect(x + w * 0.68, y + h * 0.40, w * 0.16, h * 0.14, [240, 240, 235]);
   disc(x + w * 0.74, y + h * 0.47, 3, [196, 40, 44]);
 }
-// 12. Supermarket storefront with awning
+// GRID 9 — supermarket storefront with awning
 function drawStore(x: number, y: number, w: number, h: number): void {
   rect(x, y, w, h, [150, 185, 220]);
   rect(x + w * 0.06, y + h * 0.30, w * 0.88, h * 0.55, [235, 230, 215]);
   rect(x + w * 0.06, y + h * 0.30, w * 0.88, h * 0.14, [196, 60, 50]);
-  for (let i = 0; i < 6; i++) rect(x + w * (0.06 + i * 0.147), y + h * 0.44, w * 0.073, h * 0.10, i % 2 ? [255, 255, 255] : [196, 60, 50]);
+  for (let i = 0; i < 6; i++) rect(x + w * (0.06 + i * 0.147), y + h * 0.44, w * 0.073, h * 0.10, i % 2 ? WHITE : [196, 60, 50]);
   rect(x + w * 0.14, y + h * 0.58, w * 0.20, h * 0.27, [120, 180, 220]);
   rect(x + w * 0.66, y + h * 0.58, w * 0.20, h * 0.27, [120, 180, 220]);
   rect(x + w * 0.42, y + h * 0.58, w * 0.16, h * 0.27, [90, 70, 50]);
@@ -448,7 +524,7 @@ function drawStore(x: number, y: number, w: number, h: number): void {
   disc(x + w * 0.10, y + h * 0.92, 2, [40, 40, 40]);
   disc(x + w * 0.90, y + h * 0.92, 2, [40, 40, 40]);
 }
-// 13. Parliament with dome and flag (Canberra)
+// GRID 10 — parliament with dome and flag (Canberra)
 function drawParliament(x: number, y: number, w: number, h: number): void {
   rect(x, y, w, h, [170, 200, 225]);
   disc(x + w * 0.80, y + h * 0.20, 7, [255, 225, 140]);
@@ -463,13 +539,16 @@ function drawParliament(x: number, y: number, w: number, h: number): void {
 }
 
 // ---------- world map ----------
+// Same projection, polygons and pin positions as v1 (verified: all pins on
+// land/coast, Gaza pin SW with a leader line, Pyongyang on the coastline).
+// v2 only raises the contrast: stronger land colour + a coastline stroke,
+// so the continents actually read as a world map at small size.
 const MAP_Y0 = 586, MAP_Y1 = 686;
 function proj(lon: number, lat: number): [number, number] {
   return [8 + (lon + 170) * 1008 / 360, MAP_Y0 + (75 - lat) * 100 / 130];
 }
 const CONTINENTS: number[][][] = [
-  // North America (single simple ring: Arctic coast east, Atlantic south, Gulf,
-  // Central America, Pacific coast north — no doubled-back edges)
+  // North America
   [[-168, 66], [-155, 71], [-140, 70], [-125, 71], [-110, 71], [-95, 69], [-85, 66], [-78, 62], [-70, 60], [-62, 58], [-56, 50], [-60, 47], [-65, 44], [-70, 40], [-74, 35], [-76, 32], [-80, 26], [-81, 30], [-84, 30], [-88, 30], [-91, 29], [-94, 29], [-97, 26], [-97, 22], [-94, 19], [-92, 15], [-89, 14], [-86, 12], [-83, 10], [-80, 8], [-79, 8], [-82, 9], [-85, 11], [-88, 13], [-91, 14], [-94, 16], [-97, 16], [-101, 18], [-105, 20], [-110, 24], [-114, 28], [-117, 33], [-121, 37], [-124, 41], [-124, 47], [-127, 49], [-131, 54], [-135, 58], [-141, 60], [-147, 61], [-153, 58], [-160, 59], [-165, 60], [-168, 66]],
   // Greenland
   [[-58, 64], [-52, 60], [-44, 60], [-40, 64], [-32, 68], [-22, 70], [-20, 74], [-30, 76], [-45, 78], [-55, 76], [-60, 72], [-58, 68], [-58, 64]],
@@ -485,7 +564,9 @@ const CONTINENTS: number[][][] = [
 function drawMap(): void {
   rect(8, MAP_Y0, 1008, MAP_Y1 - MAP_Y0, SEA);
   for (const cont of CONTINENTS) {
-    poly(cont.map(([lo, la]) => { const [x, y] = proj(lo, la); return [Math.round(x), Math.round(y)]; }), LAND);
+    const pts = cont.map(([lo, la]) => { const [x, y] = proj(lo, la); return [Math.round(x), Math.round(y)]; });
+    poly(pts, LAND);
+    polyline(pts, COAST);
   }
   // New Zealand dots
   const [zx1, zy1] = proj(167, -45), [zx2, zy2] = proj(174, -41);
@@ -502,8 +583,8 @@ const PINS: [number, number, number][] = [
 function drawPins(): void {
   line(564, 634, 580, 620, RED); // leader: Gaza pin to the Gaza coast
   for (const [x, y, n] of PINS) {
-    disc(x, y, 7, WHITE);
-    ring(x, y, 7, RED); ring(x, y, 6, RED);
+    disc(x, y, 8, WHITE);
+    ring(x, y, 8, RED); ring(x, y, 7, RED);
     drawTextC(String(n), x, y - 3, 1, RED);
   }
 }
@@ -514,6 +595,8 @@ function outline(x: number, y: number, w: number, h: number, c: RGB = INK): void
   rect(x, y, 1, h, c); rect(x + w - 1, y, 1, h, c);
 }
 
+// All headlines, decks, numbers, times and pins below are v1's facts,
+// unchanged: the news does not change, only the drawing does.
 const HEROES = [
   { tag: 'AMERICAS', title: 'THANKSGIVING AT 100', deck: "MACY'S 100TH PARADE MARCHES IN NEW YORK, THEN THREE NFL GAMES: BEARS-LIONS, EAGLES-COWBOYS, CHIEFS-BILLS.", art: drawParade },
   { tag: 'WORLD', title: 'TARIFF BLITZ', deck: 'TRUMP PROPOSES TARIFFS ON 14 PARTNERS, FROM CHINA TO THE EU; INDIA FACES UP TO 25%.', art: drawPort },
